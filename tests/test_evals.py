@@ -245,3 +245,9 @@ def test_failure_lines_say_why():
     noted = evals.TrialResult("m", "b", 1, False, {"fix_tests_pass": False}, "x", "submitted", 3, 1, 1, 1.0, notes="why")
     text = evals.render_report([stopped, noted])
     assert "stop reason: max_steps" in text and "(why)" in text
+
+
+def test_report_counts_trials_where_the_warning_was_sent():
+    a = evals.TrialResult("m", "a", 1, True, {"root_cause": True}, "x", "submitted", 5, 1, 1, 1.0, warned=True)
+    b = evals.TrialResult("m", "a", 2, True, {"root_cause": True}, "x", "submitted", 5, 1, 1, 1.0)
+    assert "step warning was sent in 1 of 2 trials" in evals.render_report([a, b])

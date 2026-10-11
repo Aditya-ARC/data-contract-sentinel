@@ -38,7 +38,7 @@ Rules:
 
 @dataclass
 class AgentConfig:
-    max_steps: int = 12
+    max_steps: int = 14
     max_total_tokens: int = 100_000
     max_history_chars: int = 24_000
 
@@ -51,6 +51,7 @@ class AgentOutcome:
     usage: Usage
     model: str
     error: str | None = None
+    warned: bool = False  # True if the "few steps remain" message was sent
 
 
 def _size(messages: list[Message]) -> int:
@@ -105,8 +106,9 @@ def investigate(
             warned = True
             messages.append(
                 Message.user(
-                    f"Only {config.max_steps - step + 1} steps remain. "
-                    f"Call {SUBMIT_TOOL_NAME} now with your best findings."
+                    f"Only {config.max_steps - step + 1} steps remain. If you have enough evidence, "
+                    f"call {SUBMIT_TOOL_NAME} now. Name the suspect commit if there is one, and include "
+                    "a fix (with a test) when you are confident in it. Do not skip the fix just to finish."
                 )
             )
         try:
@@ -122,7 +124,7 @@ def investigate(
 
         if not response.tool_calls:
             if nudged:
-                return AgentOutcome(None, "no_tool_call", step, usage, llm.model)
+                return AgentOutcome(None, "no_tool_call", step, usage, llm.model, warned=warned)
             nudged = True
             messages.append(Message.user(f"Call {SUBMIT_TOOL_NAME} now with your findings so far."))
             continue
@@ -130,10 +132,10 @@ def investigate(
         for call in response.tool_calls:
             result, analysis = _handle_call(call, toolbox)
             if analysis is not None:
-                return AgentOutcome(analysis, "submitted", step, usage, llm.model)
+                return AgentOutcome(analysis, "submitted", step, usage, llm.model, warned=warned)
             messages.append(Message.tool_result(call.id, clip(result, MAX_OUTPUT_CHARS * 2)))
 
         if usage.input_tokens + usage.output_tokens > config.max_total_tokens:
-            return AgentOutcome(None, "token_budget", step, usage, llm.model)
+            return AgentOutcome(None, "token_budget", step, usage, llm.model, warned=warned)
 
-    return AgentOutcome(None, "max_steps", config.max_steps, usage, llm.model)
+    return AgentOutcome(None, "max_steps", config.max_steps, usage, llm.model, warned=warned)

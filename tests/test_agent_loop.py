@@ -158,3 +158,22 @@ def test_prompt_tells_the_agent_to_search_for_pinned_values():
     from contractsentinel.agent.loop import SYSTEM_PROMPT
 
     assert "search_code" in SYSTEM_PROMPT and "update tests" in SYSTEM_PROMPT
+
+
+def test_outcome_records_whether_the_warning_was_sent(incident_env, contract):
+    _, quick = run(incident_env, contract, [tool_response(SUBMIT_TOOL_NAME, REPORT)])
+    assert quick.warned is False
+    responses = [tool_response("get_run_summary", {}, f"c{i}") for i in range(4)]
+    _, slow = run(incident_env, contract, responses, max_steps=4)
+    assert slow.warned is True
+
+
+def test_warning_asks_for_a_fix_and_suspect_commit(incident_env, contract):
+    responses = [tool_response("get_run_summary", {}, f"c{i}") for i in range(4)]
+    llm, _ = run(incident_env, contract, responses, max_steps=4)
+    text = " ".join(m.content or "" for m in llm.requests[3][0] if m.role == "user")
+    assert "suspect commit" in text and "fix" in text
+
+
+def test_default_step_budget_is_fourteen():
+    assert AgentConfig().max_steps == 14

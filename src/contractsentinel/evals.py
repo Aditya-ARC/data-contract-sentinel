@@ -82,6 +82,7 @@ class TrialResult:
     seconds: float
     error: str | None = None
     notes: str = ""
+    warned: bool = False
 
 
 # ---- scenario construction --------------------------------------------------------------
@@ -387,6 +388,7 @@ def run_trial(
         seconds=round(seconds, 1),
         error=outcome.error,
         notes=" | ".join(notes),
+        warned=outcome.warned,
     )
 
 
@@ -450,6 +452,10 @@ def render_report(results: list[TrialResult], prices=None) -> str:
             f"{statistics.mean(r.seconds for r in rs):.0f} | {_fmt_cost(avg_cost)} |"
         )
 
+    for m in models:
+        rs = [r for r in results if r.model == m]
+        lines.append(f"\n`{m}`: the step warning was sent in {sum(r.warned for r in rs)} of {len(rs)} trials.")
+
     lines += ["", "## Passes by scenario", "", "| Scenario | " + " | ".join(f"`{m}`" for m in models) + " |"]
     lines.append("|---|" + "---|" * len(models))
     for s in scenarios:
@@ -468,6 +474,8 @@ def render_report(results: list[TrialResult], prices=None) -> str:
             note = f" ({'; '.join(detail)})" if detail else ""
             if "diagnosed" in failed:
                 note = f" (stop reason: {r.stop_reason}){note if r.error else ''}"
+            if r.warned:
+                note += " [step warning was sent]"
             lines.append(
                 f"- `{r.model}` {r.scenario} #{r.trial}: failed {', '.join(failed)}; "
                 f"root cause given: {r.root_cause}{note}"
