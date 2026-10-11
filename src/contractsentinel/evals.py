@@ -173,8 +173,17 @@ def _base_repo(repo: Path, notices: str) -> None:
     (repo / "contracts").mkdir()
     shutil.copy(root / "contracts" / "orders.yaml", repo / "contracts" / "orders.yaml")
     (repo / "tests").mkdir()
-    for name in ("conftest.py", "test_transform.py", "test_validator.py", "test_contract.py"):
+    for name in ("conftest.py", "test_validator.py", "test_contract.py"):
         shutil.copy(root / "tests" / name, repo / "tests" / name)
+    # transform.py and its tests are pinned, so a fix merged into the real repo
+    # cannot change what the scenarios start from.
+    fixtures = Path(__file__).resolve().parent / "eval_fixtures"
+    (repo / "src" / "contractsentinel" / "transform.py").write_text(
+        (fixtures / "transform.py.txt").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (repo / "tests" / "test_transform.py").write_text(
+        (fixtures / "test_transform.py.txt").read_text(encoding="utf-8"), encoding="utf-8"
+    )
     shutil.copy(root / "pyproject.toml", repo / "pyproject.toml")
     (repo / "docs").mkdir()
     (repo / "docs" / "vendor-notices.md").write_text(notices, encoding="utf-8")
@@ -236,10 +245,21 @@ def build_scenario(name: str, workdir: Path, contract_path: Path | None = None) 
         description = "The vendor renamed customer_id to cust_id. No notice, no code change."
         cause, expect_fix = "schema_drift", "optional"
 
-    contract = load_contract(contract_path or repo / "contracts" / "orders.yaml")
-    result = run_batch(batch, contract, None, workdir / "runs", dry_run=True)
-    if not result.needs_agent:
-        raise EvalError(f"scenario {name} did not trigger the agent; the batch passed the contract.")
+    # Run the pipeline from the scenario's own code, not the code of the repo we run in.
+    cmd = [
+        sys.executable, "-c",
+        "import sys; from contractsentinel.cli import main; sys.exit(main(sys.argv[1:]))",
+        "run", str(batch),
+        "--contract", str(contract_path or repo / "contracts" / "orders.yaml"),
+        "--artifacts", str(workdir / "runs"), "--dry-run",
+    ]
+    proc = subprocess.run(cmd, cwd=repo, env=_env_for(repo), capture_output=True, text=True, timeout=GATE_SECONDS)
+    if proc.returncode != 1:
+        raise EvalError(f"scenario {name} did not trigger the agent (exit code {proc.returncode}): {proc.stderr[-300:]}")
+    found = re.search(r"^artifacts:\s+(.+)$", proc.stdout, re.MULTILINE)
+    if not found:
+        raise EvalError(f"scenario {name}: could not find the artifacts directory in the pipeline output.")
+    artifacts_dir = Path(found.group(1).strip())
 
     scenario = Scenario(
         name=name,
@@ -248,7 +268,7 @@ def build_scenario(name: str, workdir: Path, contract_path: Path | None = None) 
         expect_fix=expect_fix,
         repo=repo,
         batch=batch,
-        artifacts=result.artifacts_dir,
+        artifacts=artifacts_dir,
         suspect_commit=suspect,
     )
     if name == "code_regression":
