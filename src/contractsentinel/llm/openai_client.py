@@ -109,6 +109,11 @@ class OpenAIClient(LLMClient):
                     "OPENAI_API_KEY is not set. Add it to your environment or .env file."
                 )
 
+        # CI passes unset variables as empty strings, and the SDK reads this variable itself.
+        # An empty value would be taken as a real (invalid) address, so drop it.
+        if not os.environ.get("OPENAI_BASE_URL"):
+            os.environ.pop("OPENAI_BASE_URL", None)
+
         from openai import OpenAI
 
         self._client = OpenAI(api_key=key, base_url=base_url)
