@@ -143,7 +143,7 @@ Measured on four scenarios with known answers (see [docs/eval.md](docs/eval.md) 
 - `gpt-6.1-sol` passed about the same share of trials as Luna (18 of 24 vs 17 of 24) in an earlier comparison at roughly 14 times the cost, so Luna is the default.
 - The evals exposed a real gap (fixes that repaired the batch but broke a test pinning the old value). Adding a code-search tool fixed it.
 
-Live demos on this repo: an Issue for a source defect ([#5](https://github.com/Aditya-ARC/data-contract-sentinel/issues/5)) and a pull request with a tested fix for a code regression ([#6](https://github.com/Aditya-ARC/data-contract-sentinel/pull/6)).
+Live demos on this repo: an Issue for a source defect ([#11](https://github.com/Aditya-ARC/data-contract-sentinel/issues/11)) and a pull request with a tested fix for a code regression ([#13](https://github.com/Aditya-ARC/data-contract-sentinel/pull/13)).
 
 ## Layout
 
