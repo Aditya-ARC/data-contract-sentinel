@@ -20,6 +20,11 @@ def test_normalize_does_not_touch_other_date_formats(make_df):
     assert out.loc[0, "order_date"] == "10/02/2026"
 
 
+def test_normalize_converts_slash_dates(make_df):
+    out = normalize(make_df({"order_date": "2026/10/03"}))
+    assert out.loc[0, "order_date"] == "2026-10-03"
+
+
 def test_normalize_keeps_the_input_unchanged(make_df):
     raw = make_df({"status": "SHIPPED"})
     normalize(raw)

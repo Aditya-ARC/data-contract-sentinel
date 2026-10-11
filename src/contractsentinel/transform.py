@@ -20,7 +20,7 @@ CASE_RULES = {"status": "lower", "region": "upper"}
 
 
 def normalize(raw: pd.DataFrame) -> pd.DataFrame:
-    """Trim whitespace and fix known casing."""
+    """Trim whitespace, fix known casing, and normalize slash-separated dates."""
     out = raw.copy()
     for col in out.columns:
         out[col] = out[col].astype(str).str.strip()
@@ -28,6 +28,11 @@ def normalize(raw: pd.DataFrame) -> pd.DataFrame:
     for col, mode in CASE_RULES.items():
         if col in out.columns:
             out[col] = out[col].str.lower() if mode == "lower" else out[col].str.upper()
+
+    if "order_date" in out.columns:
+        out["order_date"] = out["order_date"].str.replace(
+            r"^(\d{4})/(\d{2})/(\d{2})$", r"\1-\2-\3", regex=True
+        )
 
     return out
 
