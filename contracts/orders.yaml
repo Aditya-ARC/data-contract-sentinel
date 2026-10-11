@@ -1,0 +1,69 @@
+# Data contract: vendor orders feed -> analytics.orders_clean
+#
+# This file is the single source of truth for what "correct" means.
+# Validation is deterministic and driven entirely by this file.
+# The AI agent never enforces rules; it only investigates after a rule fails.
+
+contract:
+  name: orders
+  version: 1.0.0
+  owner: data-platform
+  description: Daily orders export from the vendor order system.
+
+source:
+  system: vendor_orders_feed
+  format: csv
+  # Values treated as NULL after trimming whitespace.
+  null_tokens: [""]
+
+destination:
+  schema: analytics
+  table: orders_clean
+  quarantine_table: orders_quarantine
+
+failure_policy:
+  # quarantine: load valid rows, quarantine invalid rows.
+  # block_batch: any violation blocks the whole batch.
+  mode: quarantine
+  # In quarantine mode, if more than this share of rows is invalid the
+  # whole batch is blocked, because the source is probably broken.
+  max_violation_rate: 0.20
+
+fields:
+  - name: order_id
+    type: string
+    nullable: false
+    unique: true
+    pattern: '^O\d{6}$'
+    description: Unique order identifier, for example O100042.
+
+  - name: customer_id
+    type: string
+    nullable: false
+    pattern: '^C\d{5}$'
+    description: Customer identifier, for example C20417. Must never be null.
+
+  - name: order_date
+    type: date
+    format: "%Y-%m-%d"
+    nullable: false
+    description: Order date in ISO 8601 (YYYY-MM-DD).
+
+  - name: amount
+    type: decimal
+    scale: 2
+    nullable: false
+    min: 0
+    description: Order total in USD. Numeric, non-negative, at most 2 decimals.
+
+  - name: status
+    type: string
+    nullable: false
+    allowed: [pending, shipped, delivered, cancelled, refunded]
+    description: Order lifecycle status.
+
+  - name: region
+    type: string
+    nullable: false
+    allowed: [NA, EMEA, APAC, LATAM]
+    description: Sales region. A valid region is required before loading.
