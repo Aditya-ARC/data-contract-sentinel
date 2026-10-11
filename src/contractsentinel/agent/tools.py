@@ -21,6 +21,10 @@ from contractsentinel.llm.base import ToolSpec
 READABLE_PREFIXES = ("src/", "tests/", "contracts/", "docs/", ".github/")
 READABLE_FILES = ("README.md", "pyproject.toml")
 MAX_READ_LINES = 120
+MAX_SEARCH_MATCHES = 30
+MAX_SEARCH_LINE_CHARS = 160
+MAX_SEARCH_FILE_BYTES = 200_000
+SEARCHABLE_SUFFIXES = (".py", ".yaml", ".yml", ".md", ".toml", ".txt", ".json", ".cfg", ".ini")
 MAX_OUTPUT_CHARS = 3500
 MAX_DIFF_CHARS = 6000
 MAX_VIOLATIONS_CHARS = 6000
@@ -82,6 +86,21 @@ class ToolBox:
                 },
             ),
             ToolSpec(
+                "search_code",
+                "Find where a text appears in src/, tests/, contracts/, docs/, .github/ and the "
+                "top-level README and pyproject. Case-insensitive literal match, up to 30 results "
+                "as path:line: text. Use it to find tests and code that mention a value you plan "
+                "to change, such as an allowed value or a column name.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "2 to 200 characters"},
+                        "path_prefix": {"type": "string", "description": "e.g. tests/ (optional)"},
+                    },
+                    "required": ["query"],
+                },
+            ),
+            ToolSpec(
                 "git_log",
                 "Recent commits (hash, date, author, subject), optionally for one path.",
                 {
@@ -111,6 +130,7 @@ class ToolBox:
             "get_run_summary": self._get_run_summary,
             "get_violations": self._get_violations,
             "read_file": self._read_file,
+            "search_code": self._search_code,
             "git_log": self._git_log,
             "git_show": self._git_show,
         }
@@ -185,6 +205,55 @@ class ToolBox:
         body = "\n".join(f"{i}: {lines[i - 1]}" for i in range(start, end + 1))
         header = f"{arguments['path']} lines {start}-{end} of {len(lines)}"
         return clip(f"{header}\n{body}")
+
+    def _search_code(self, arguments: dict[str, Any]) -> str:
+        query = arguments.get("query")
+        if not isinstance(query, str) or not 2 <= len(query) <= 200:
+            raise ToolError("'query' must be a string of 2 to 200 characters")
+        prefix = arguments.get("path_prefix") or ""
+        if not isinstance(prefix, str):
+            raise ToolError("'path_prefix' must be a string")
+        if prefix:
+            start = self._safe_path(prefix.rstrip("/") + "/x").parent
+            if not start.is_dir():
+                raise ToolError(f"directory not found: {prefix}")
+            roots = [start]
+        else:
+            roots = [self.root / p.rstrip("/") for p in READABLE_PREFIXES] + [
+                self.root / f for f in READABLE_FILES
+            ]
+
+        needle = query.lower()
+        hits: list[str] = []
+        truncated = False
+        for base in roots:
+            files = [base] if base.is_file() else sorted(base.rglob("*")) if base.is_dir() else []
+            for path in files:
+                if truncated:
+                    break
+                if path.is_symlink() or not path.is_file() or "__pycache__" in path.parts:
+                    continue
+                if path.suffix not in SEARCHABLE_SUFFIXES or path.stat().st_size > MAX_SEARCH_FILE_BYTES:
+                    continue
+                if not path.resolve().is_relative_to(self.root):
+                    continue
+                rel = path.relative_to(self.root).as_posix()
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                for number, line in enumerate(text.splitlines(), 1):
+                    if needle in line.lower():
+                        if len(hits) >= MAX_SEARCH_MATCHES:
+                            truncated = True
+                            break
+                        hits.append(f"{rel}:{number}: {line.strip()[:MAX_SEARCH_LINE_CHARS]}")
+        if not hits:
+            return f"no matches for {query!r}"
+        out = "\n".join(hits)
+        if truncated:
+            out += f"\n(stopped after {MAX_SEARCH_MATCHES} matches; narrow the query or path_prefix)"
+        return clip(out)
 
     def _git_log(self, arguments: dict[str, Any]) -> str:
         count = _int_arg(arguments, "max_count", 10, 1, 20)

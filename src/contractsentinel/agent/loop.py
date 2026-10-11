@@ -32,7 +32,8 @@ Rules:
 - Classify the root cause: source_defect (the source sent bad values), code_regression (a code change broke handling of valid input), contract_out_of_date (the source legitimately changed and the contract should follow), schema_drift (columns added, removed or renamed upstream), or unknown.
 - Propose a fix only when you are confident it addresses the cause. Source defects need no code fix. Never loosen the contract unless the cause is contract_out_of_date.
 - Fixes are exact search-and-replace edits on files under src/, tests/ or contracts/. The text to replace must appear exactly once in the file. Add a regression test for code fixes. Keep changes minimal.
-- You have a small step budget. Finish by calling submit_incident_report exactly once."""
+- Before proposing a fix, use search_code to find every test and file that mentions the value you will change (an allowed value, a column name, a function). A fix must keep the test suite green, so update tests that pin the old behavior in the same fix.
+- Work efficiently: read larger line ranges instead of many small ones, and do not re-read files. You have a small step budget, and running out without a report is the worst outcome. Finish by calling submit_incident_report exactly once."""
 
 
 @dataclass
@@ -97,8 +98,17 @@ def investigate(
     messages = [Message.system(SYSTEM_PROMPT), Message.user(brief)]
     usage = Usage()
     nudged = False
+    warned = False
 
     for step in range(1, config.max_steps + 1):
+        if not warned and config.max_steps - step == 1 and step > 1:
+            warned = True
+            messages.append(
+                Message.user(
+                    f"Only {config.max_steps - step + 1} steps remain. "
+                    f"Call {SUBMIT_TOOL_NAME} now with your best findings."
+                )
+            )
         try:
             response = llm.chat(trim_history(messages, config.max_history_chars), tools)
         except Exception as exc:  # network errors, rate limits, provider outages

@@ -172,5 +172,53 @@ def test_clip_marks_truncation():
 
 def test_specs_describe_every_tool(toolbox):
     names = [s.name for s in toolbox.specs()]
-    assert names == ["get_run_summary", "get_violations", "read_file", "git_log", "git_show"]
+    assert names == ["get_run_summary", "get_violations", "read_file", "search_code", "git_log", "git_show"]
     assert all(s.parameters["type"] == "object" for s in toolbox.specs())
+
+
+# ---- search_code ----------------------------------------------------------------------
+
+
+def test_search_finds_matches_with_paths_and_lines(toolbox):
+    out = toolbox.call("search_code", {"query": "normalize_date"})
+    assert "src/demo/transform.py:1: def normalize_date(value):" in out
+    assert "tests/" not in out or "normalize_date" in out
+
+
+def test_search_is_case_insensitive_and_can_be_scoped(toolbox):
+    assert "src/demo/transform.py" in toolbox.call("search_code", {"query": "NORMALIZE_DATE"})
+    assert toolbox.call("search_code", {"query": "normalize_date", "path_prefix": "tests/"}).startswith("no matches")
+
+
+def test_search_finds_values_pinned_in_contracts(toolbox):
+    out = toolbox.call("search_code", {"query": "LATAM"})
+    assert "contracts/orders.yaml" in out
+
+
+def test_search_reports_no_matches(toolbox):
+    assert toolbox.call("search_code", {"query": "zzz-not-here"}) == "no matches for 'zzz-not-here'"
+
+
+@pytest.mark.parametrize("args", [{}, {"query": "a"}, {"query": "x" * 201}, {"query": 5}])
+def test_search_validates_the_query(toolbox, args):
+    assert toolbox.call("search_code", args).startswith("error:")
+
+
+@pytest.mark.parametrize("prefix", ["../", "/etc", ".git", "samples", "runs"])
+def test_search_refuses_unlisted_or_escaping_prefixes(toolbox, prefix):
+    assert toolbox.call("search_code", {"query": "ab", "path_prefix": prefix}).startswith("error:")
+
+
+def test_search_never_follows_symlinks_out_of_the_repo(incident_env, contract, tmp_path):
+    secret = tmp_path / "secret.txt"
+    secret.write_text("top secret needle")
+    os.symlink(secret, incident_env.repo / "src" / "link.txt")
+    out = ToolBox(incident_env.repo, incident_env.batch_dir, contract).call("search_code", {"query": "needle"})
+    assert "top secret" not in out
+
+
+def test_search_caps_the_number_of_matches(incident_env, contract):
+    (incident_env.repo / "docs").mkdir(exist_ok=True)
+    (incident_env.repo / "docs" / "many.md").write_text("\n".join("needle %d" % i for i in range(100)))
+    out = ToolBox(incident_env.repo, incident_env.batch_dir, contract).call("search_code", {"query": "needle"})
+    assert out.count("docs/many.md:") == 30 and "stopped after 30 matches" in out

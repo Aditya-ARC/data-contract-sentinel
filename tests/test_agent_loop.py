@@ -143,3 +143,18 @@ def test_trim_history_noop_when_small():
 def test_tool_arguments_are_json_serializable_in_scripted_flow(incident_env, contract):
     _, out = run(incident_env, contract, [tool_response(SUBMIT_TOOL_NAME, REPORT)])
     json.dumps(out.analysis.evidence)
+
+
+def test_agent_is_warned_when_few_steps_remain(incident_env, contract):
+    responses = [tool_response("get_run_summary", {}, f"c{i}") for i in range(4)]
+    llm, out = run(incident_env, contract, responses, max_steps=4)
+    assert out.stop_reason == "max_steps"
+    warned = [m for m in llm.requests[3][0] if m.role == "user" and "steps remain" in (m.content or "")]
+    assert len(warned) == 1  # sent once, before the last step
+    assert not any("steps remain" in (m.content or "") for m in llm.requests[1][0])
+
+
+def test_prompt_tells_the_agent_to_search_for_pinned_values():
+    from contractsentinel.agent.loop import SYSTEM_PROMPT
+
+    assert "search_code" in SYSTEM_PROMPT and "update tests" in SYSTEM_PROMPT
