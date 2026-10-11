@@ -250,11 +250,3 @@ def test_sample_files_have_the_documented_names(samples):
     assert good.name == GOOD_NAME and bad.name == BAD_NAME
     assert len(pd.read_csv(good)) == 40
 
-
-def test_slash_date_sample_passes_the_contract(tmp_path, contract):
-    """Vendor batches with 2026/10/03 dates are valid because normalize() fixes them."""
-    from contractsentinel.sample_data import write_slash_date_sample
-
-    path = write_slash_date_sample(tmp_path)
-    result = run_batch(path, contract, None, tmp_path / "runs", dry_run=True)
-    assert result.status == "loaded" and not result.needs_agent

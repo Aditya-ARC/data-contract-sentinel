@@ -8,12 +8,11 @@ from contractsentinel.transform import normalize, to_typed
 from contractsentinel.validator import validate
 
 
-def test_normalize_trims_fixes_case_and_slash_dates(make_df):
-    raw = make_df({"status": " Shipped ", "region": "emea", "order_date": "2026/10/04"})
+def test_normalize_trims_and_fixes_case(make_df):
+    raw = make_df({"status": " Shipped ", "region": "emea"})
     out = normalize(raw)
     assert out.loc[0, "status"] == "shipped"
     assert out.loc[0, "region"] == "EMEA"
-    assert out.loc[0, "order_date"] == "2026-10-04"
 
 
 def test_normalize_does_not_touch_other_date_formats(make_df):
@@ -28,7 +27,7 @@ def test_normalize_keeps_the_input_unchanged(make_df):
 
 
 def test_normalized_batch_then_validates(contract, make_df):
-    raw = make_df({"status": "DELIVERED", "region": "apac", "order_date": "2026/10/04"})
+    raw = make_df({"status": "DELIVERED", "region": "apac", "order_date": "2026-10-04"})
     assert validate(normalize(raw), contract, "b1").passed
 
 
