@@ -27,7 +27,7 @@ from contractsentinel.llm.base import (
 )
 
 # Override with OPENAI_MODEL. Check OpenAI's models page for what is current.
-DEFAULT_MODEL = "gpt-5-mini"
+DEFAULT_MODEL = "gpt-6-luna"
 
 
 def to_openai_messages(messages: list[Message]) -> list[dict[str, Any]]:

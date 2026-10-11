@@ -58,7 +58,8 @@ Vendor CSV lands (landing/ or manual dispatch)
 - Contract edits are only accepted when the root cause is contract_out_of_date, and those PRs carry the `contract-change` label.
 - A PR opens only if the tests pass. Otherwise the output is an Issue.
 - Values in columns marked `sensitive: true` are masked before anything is sent to the LLM or written to a report.
-- Every incident has a step limit and a token budget.
+- Every incident has a step limit (14) and a token budget (100,000 tokens). The agent is warned when two steps remain.
+- Tools are read-only: run summary, violations, file reads, code search, and git history. Reads are limited to `src/`, `tests/`, `contracts/`, `docs/`, `.github/` and two top-level files.
 - Least privilege: the agent job gets only the GitHub permissions it needs.
 - Audit trail per incident: run artifacts, quarantine rows, report, PR or Issue.
 

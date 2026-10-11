@@ -104,10 +104,10 @@ The agent only talks to a provider-neutral interface in `contractsentinel/llm/`.
 
 ```bash
 export OPENAI_API_KEY=...
-export OPENAI_MODEL=...      # pick a tool-calling model; defaults to gpt-5-mini
+export OPENAI_MODEL=...      # a tool-calling model; defaults to gpt-6-luna
 ```
 
-`OPENAI_BASE_URL` points the same client at any OpenAI-compatible endpoint, such as a local Ollama server. Other providers can be added by implementing `LLMClient` and calling `register_provider`. `ScriptedLLMClient` replays canned responses so the agent loop can be tested without network access or spend.
+The client uses OpenAI's Responses API by default, because newer reasoning models need it for tool calling. When `OPENAI_BASE_URL` points at another OpenAI-compatible endpoint, such as a local Ollama server, it uses Chat Completions instead. Override with `OPENAI_API=responses|chat`. Other providers can be added by implementing `LLMClient` and calling `register_provider`. `ScriptedLLMClient` replays canned responses so the agent loop can be tested without network access or spend.
 
 ## Investigation agent
 
@@ -135,6 +135,16 @@ contractsentinel eval --models gpt-6-luna,gpt-6.1-sol --trials 3
 
 It calls the real model, so it costs money. Prices live in `src/contractsentinel/evals.py` and can be overridden with `--price MODEL=IN,OUT`.
 
+## Results so far
+
+Measured on four scenarios with known answers (see [docs/eval.md](docs/eval.md) for method and limits):
+
+- `gpt-6-luna` passed 30 of 32 trials in the latest run (about $0.004 per incident), with the right root cause in all 32.
+- `gpt-6.1-sol` passed the same share of trials as Luna in an earlier comparison at roughly 14 times the cost, so Luna is the default.
+- The evals exposed a real gap (fixes that repaired the batch but broke a test pinning the old value). Adding a code-search tool fixed it.
+
+Live demos on this repo: an Issue for a source defect ([#5](https://github.com/Aditya-ARC/data-contract-sentinel/issues/5)) and a pull request with a tested fix for a code regression ([#6](https://github.com/Aditya-ARC/data-contract-sentinel/pull/6)).
+
 ## Layout
 
 ```
@@ -149,7 +159,8 @@ src/contractsentinel/
   transform.py                 normalize + typed casts (the pipeline code the agent will read)
   pipeline.py                  validate, decide, load, write artifacts
   adapters/                    DuckDB and Snowflake
-  llm/                         provider-neutral types, OpenAI client, factory, scripted client
+  llm/                         provider-neutral types, OpenAI client (Responses + Chat), factory, scripted client
+  evals.py                     scenarios with known answers and deterministic scoring
   summary.py                   Markdown run summaries (used in Actions)
   agent/                       tools, loop, schema, fixes, report, GitHub client, orchestration
   cli.py                       contractsentinel make-sample | run | summarize | investigate
