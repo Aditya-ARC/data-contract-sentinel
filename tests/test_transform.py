@@ -27,7 +27,7 @@ def test_normalize_keeps_the_input_unchanged(make_df):
 
 
 def test_normalized_batch_then_validates(contract, make_df):
-    raw = make_df({"status": "DELIVERED", "region": "apac", "order_date": "2026-10-04"})
+    raw = make_df({"status": "DELIVERED", "region": "apac", "order_date": "2026/10/04"})
     assert validate(normalize(raw), contract, "b1").passed
 
 
