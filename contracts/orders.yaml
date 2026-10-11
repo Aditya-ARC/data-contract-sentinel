@@ -41,6 +41,9 @@ fields:
     type: string
     nullable: false
     pattern: '^C\d{5}$'
+    # Sensitive values are masked (shape kept, content hidden) before they are
+    # shown to the AI agent. Letters become A or a, digits become 9.
+    sensitive: true
     description: Customer identifier, for example C20417. Must never be null.
 
   - name: order_date

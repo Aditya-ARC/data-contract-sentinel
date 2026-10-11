@@ -9,6 +9,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -44,6 +45,21 @@ def _build_parser() -> argparse.ArgumentParser:
 
     summarize = sub.add_parser("summarize", help="Print a Markdown summary of run artifacts.")
     summarize.add_argument("--runs", default="runs", help="Directory containing run artifacts.")
+
+    inv = sub.add_parser(
+        "investigate",
+        help="Investigate failed batches and open a GitHub Issue or PR.",
+        description="Reads run artifacts, investigates each failed batch, and opens an Issue "
+        "(or a PR when a tested fix exists). Needs GITHUB_TOKEN and GITHUB_REPOSITORY unless "
+        "--dry-run is used.",
+    )
+    inv.add_argument("--runs", default="runs", help="Directory containing run artifacts.")
+    inv.add_argument("--batch", help="Only investigate this batch id.")
+    inv.add_argument("--contract", default="contracts/orders.yaml")
+    inv.add_argument("--repo-root", default=".", help="Repository checkout the agent may read.")
+    inv.add_argument("--provider", help="LLM provider (default: LLM_PROVIDER or openai).")
+    inv.add_argument("--no-llm", action="store_true", help="Deterministic report only.")
+    inv.add_argument("--dry-run", action="store_true", help="Print the report; change nothing.")
     return parser
 
 
@@ -90,6 +106,55 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return EXIT_VIOLATIONS if result.needs_agent else EXIT_OK
 
 
+def _cmd_investigate(args: argparse.Namespace) -> int:
+    from contractsentinel.agent.github import GitHubClient
+    from contractsentinel.agent.investigate import InvestigationSettings, investigate_runs
+    from contractsentinel.llm import LLMConfigError, get_llm_client
+
+    contract = load_contract(args.contract)
+
+    llm = None
+    if not args.no_llm:
+        try:
+            llm = get_llm_client(args.provider)
+        except LLMConfigError as exc:
+            print(f"warning: {exc} Continuing with the deterministic report only.", file=sys.stderr)
+
+    gh = None
+    if not args.dry_run:
+        token = os.getenv("GITHUB_TOKEN")
+        repo = os.getenv("GITHUB_REPOSITORY")
+        if not token or not repo:
+            print("error: GITHUB_TOKEN and GITHUB_REPOSITORY are required (or use --dry-run).", file=sys.stderr)
+            return EXIT_ERROR
+        gh = GitHubClient(token, repo, api_url=os.getenv("GITHUB_API_URL", "https://api.github.com"))
+
+    run_url = None
+    if os.getenv("GITHUB_RUN_ID") and os.getenv("GITHUB_REPOSITORY"):
+        server = os.getenv("GITHUB_SERVER_URL", "https://github.com")
+        run_url = f"{server}/{os.getenv('GITHUB_REPOSITORY')}/actions/runs/{os.getenv('GITHUB_RUN_ID')}"
+
+    settings = InvestigationSettings(
+        repo_root=Path(args.repo_root).resolve(),
+        contract=contract,
+        dry_run=args.dry_run,
+        run_url=run_url,
+    )
+    results = investigate_runs(args.runs, settings, llm, gh, only_batch=args.batch)
+    if not results:
+        print("No run artifacts found to investigate.")
+        return EXIT_OK
+
+    for result in results:
+        print(f"{result.batch_id}: {result.action}" + (f" {result.url}" if result.url else ""))
+        for note in result.notes:
+            print(f"  note: {note}")
+        if args.dry_run and result.action == "dry_run":
+            print()
+            print(result.body)
+    return EXIT_OK
+
+
 def _cmd_summarize(args: argparse.Namespace) -> int:
     print(render_summary(args.runs), end="")
     return EXIT_OK
@@ -102,8 +167,10 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_make_sample(args)
         if args.command == "summarize":
             return _cmd_summarize(args)
+        if args.command == "investigate":
+            return _cmd_investigate(args)
         return _cmd_run(args)
-    except (ContractError, RuntimeError, ValueError, OSError) as exc:
+    except (ContractError, RuntimeError, ValueError, OSError) as exc:  # includes GitHubError
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
 

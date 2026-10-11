@@ -9,7 +9,8 @@ name: Pipeline
 #   1  contract violated: any error-level violation, even a single bad row
 #   2  tool error: fails this job
 # A contract violation does NOT fail the job. It sets the `violations` output,
-# which is the trigger for the investigation agent job (added in a later phase).
+# which is the trigger for the `agent` job below. With no OPENAI_API_KEY the agent
+# still files a deterministic report; it never merges anything.
 
 on:
   workflow_dispatch:
@@ -94,14 +95,39 @@ jobs:
           path: runs/
           if-no-files-found: ignore
 
-  # Added in the agent phase:
-  #
-  # agent:
-  #   needs: pipeline
-  #   if: needs.pipeline.outputs.violations == 'true'
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: write       # push a branch
-  #     pull-requests: write  # open the PR
-  #     issues: write         # open an issue when there is no code fix
-  #   steps: download the runs artifact, run the investigation agent
+  agent:
+    needs: pipeline
+    if: needs.pipeline.outputs.violations == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # push a fix branch
+      pull-requests: write  # open the PR
+      issues: write         # open an Issue when there is no tested code fix
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 50   # the agent reads recent history with git_log / git_show
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: runs-${{ github.run_id }}
+          path: runs
+
+      - name: Investigate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Optional repository variables. Leave unset to use the defaults.
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+        run: contractsentinel investigate --runs runs
