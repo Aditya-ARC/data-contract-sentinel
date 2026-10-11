@@ -140,7 +140,7 @@ It calls the real model, so it costs money. Prices live in `src/contractsentinel
 Measured on four scenarios with known answers (see [docs/eval.md](docs/eval.md) for method and limits):
 
 - `gpt-6-luna` passed 30 of 32 trials in the latest run (about $0.004 per incident), with the right root cause in all 32.
-- `gpt-6.1-sol` passed the same share of trials as Luna in an earlier comparison at roughly 14 times the cost, so Luna is the default.
+- `gpt-6.1-sol` passed about the same share of trials as Luna (18 of 24 vs 17 of 24) in an earlier comparison at roughly 14 times the cost, so Luna is the default.
 - The evals exposed a real gap (fixes that repaired the batch but broke a test pinning the old value). Adding a code-search tool fixed it.
 
 Live demos on this repo: an Issue for a source defect ([#5](https://github.com/Aditya-ARC/data-contract-sentinel/issues/5)) and a pull request with a tested fix for a code regression ([#6](https://github.com/Aditya-ARC/data-contract-sentinel/pull/6)).
