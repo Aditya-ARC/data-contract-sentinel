@@ -1,0 +1,107 @@
+name: Pipeline
+
+# Runs the data-contract-sentinel pipeline on a batch file.
+#   - Manually: Actions tab -> Pipeline -> Run workflow, with a batch file path.
+#   - Automatically: when CSV files are pushed to landing/.
+#
+# Exit codes from `contractsentinel run`:
+#   0  batch passed the contract
+#   1  contract violated: any error-level violation, even a single bad row
+#   2  tool error: fails this job
+# A contract violation does NOT fail the job. It sets the `violations` output,
+# which is the trigger for the investigation agent job (added in a later phase).
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_file:
+        description: Path to the batch CSV inside the repo
+        required: true
+        default: samples/orders_2026-10-02.csv
+  push:
+    paths:
+      - "landing/**"
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    outputs:
+      violations: ${{ steps.run.outputs.violations }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Run pipeline
+        id: run
+        env:
+          # Passed through env, never interpolated into the script.
+          INPUT_BATCH: ${{ inputs.batch_file }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set +e
+          shopt -s nullglob
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            files=("$INPUT_BATCH")
+          else
+            files=(landing/*.csv)
+          fi
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No batch files to process."
+          fi
+
+          violations=false
+          tool_error=0
+          for f in "${files[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Batch file not found: $f"
+              tool_error=1
+              continue
+            fi
+            contractsentinel run "$f" --db data/warehouse.duckdb --artifacts runs
+            code=$?
+            if [ "$code" -eq 1 ]; then
+              violations=true
+              echo "::warning::Contract violated in $f. Run artifacts are attached to this run."
+            elif [ "$code" -ne 0 ]; then
+              echo "::error::Tool error while processing $f (exit $code)"
+              tool_error=1
+            fi
+          done
+
+          echo "violations=$violations" >> "$GITHUB_OUTPUT"
+          exit $tool_error
+
+      - name: Job summary
+        if: always()
+        run: contractsentinel summarize --runs runs >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runs-${{ github.run_id }}
+          path: runs/
+          if-no-files-found: ignore
+
+  # Added in the agent phase:
+  #
+  # agent:
+  #   needs: pipeline
+  #   if: needs.pipeline.outputs.violations == 'true'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: write       # push a branch
+  #     pull-requests: write  # open the PR
+  #     issues: write         # open an issue when there is no code fix
+  #   steps: download the runs artifact, run the investigation agent

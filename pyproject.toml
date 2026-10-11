@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-contract-sentinel"
+version = "0.1.0"
+description = "Contract-first data pipeline guard: deterministic validation, quarantine, and an AI agent that investigates failures."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "duckdb>=1.0",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "numpy>=1.26",
+    "openai>=1.40",
+]
+
+[project.optional-dependencies]
+snowflake = ["snowflake-connector-python>=3.6"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+contractsentinel = "contractsentinel.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
