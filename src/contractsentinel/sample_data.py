@@ -68,3 +68,20 @@ def write_samples(out_dir: str | Path, rows: int = 40, seed: int = 7) -> tuple[P
     good.to_csv(good_path, index=False)
     bad.to_csv(bad_path, index=False)
     return good_path, bad_path
+
+
+SLASH_NAME = "orders_2026-10-03.csv"
+
+
+def write_slash_date_sample(out_dir: str | Path, rows: int = 40, seed: int = 7) -> Path:
+    """A fully valid batch whose vendor writes dates as 2026/10/03.
+
+    The pipeline normalizes these to ISO dates, so this batch passes. It is used for the
+    code-regression demo: if date normalization breaks, every row fails the date rule.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    df = generate_orders(rows, "2026/10/03", seed=seed + 200, id_start=300001)
+    path = out_dir / SLASH_NAME
+    df.to_csv(path, index=False)
+    return path
