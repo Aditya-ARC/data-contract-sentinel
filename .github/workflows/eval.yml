@@ -1,0 +1,63 @@
+name: Model eval
+
+# Runs the investigation agent on scenarios with known answers and scores each model.
+# Calls the real LLM, so it costs money: about a cent per model with the defaults.
+# Results: the job summary, an uploaded artifact, and a GitHub Issue titled "Model eval results".
+
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: Comma-separated model ids
+        required: true
+        default: gpt-6-luna,gpt-6.1-sol
+      trials:
+        description: Runs per scenario per model (1 to 10)
+        required: true
+        default: "3"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Run eval
+        env:
+          # Inputs go through env vars, never interpolated into the script.
+          INPUT_MODELS: ${{ inputs.models }}
+          INPUT_TRIALS: ${{ inputs.trials }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+        run: contractsentinel eval --models "$INPUT_MODELS" --trials "$INPUT_TRIALS" --out eval-results
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f eval-results/report.md ]; then cat eval-results/report.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: eval-results/
+          if-no-files-found: ignore
+
+      - name: Publish results as an Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh issue create --title "Model eval results ($(date -u +%Y-%m-%d))" --body-file eval-results/report.md

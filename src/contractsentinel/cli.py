@@ -60,6 +60,20 @@ def _build_parser() -> argparse.ArgumentParser:
     inv.add_argument("--provider", help="LLM provider (default: LLM_PROVIDER or openai).")
     inv.add_argument("--no-llm", action="store_true", help="Deterministic report only.")
     inv.add_argument("--dry-run", action="store_true", help="Print the report; change nothing.")
+
+    ev = sub.add_parser(
+        "eval",
+        help="Score models on scenarios with known answers.",
+        description="Runs the investigation agent on built-in broken-batch scenarios, once per "
+        "trial per model, and writes a Markdown report. Calls the real LLM, so it costs money "
+        "(a few cents per model with the default settings).",
+    )
+    ev.add_argument("--models", required=True, help="Comma-separated model ids, e.g. gpt-6-luna,gpt-6.1-sol")
+    ev.add_argument("--trials", type=int, default=3, help="Runs per scenario per model.")
+    ev.add_argument("--scenarios", help="Comma-separated subset (default: all).")
+    ev.add_argument("--provider", help="LLM provider (default: LLM_PROVIDER or openai).")
+    ev.add_argument("--out", default="eval-results", help="Directory for report.md and results.json.")
+    ev.add_argument("--price", action="append", help="MODEL=IN,OUT USD per million tokens. Repeatable.")
     return parser
 
 
@@ -155,6 +169,37 @@ def _cmd_investigate(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _cmd_eval(args: argparse.Namespace) -> int:
+    from contractsentinel import evals
+    from contractsentinel.llm import get_llm_client
+
+    models = [m.strip() for m in args.models.split(",") if m.strip()]
+    if not models:
+        print("error: --models needs at least one model id.", file=sys.stderr)
+        return EXIT_ERROR
+    if not 1 <= args.trials <= 10:
+        print("error: --trials must be between 1 and 10.", file=sys.stderr)
+        return EXIT_ERROR
+    scenarios = [s.strip() for s in args.scenarios.split(",")] if args.scenarios else None
+    prices = evals.parse_prices(args.price)
+
+    def make_llm(model: str):
+        os.environ["OPENAI_MODEL"] = model
+        return get_llm_client(args.provider)
+
+    results = evals.run_eval(
+        models, make_llm, args.trials, scenarios, progress=lambda line: print(line, flush=True)
+    )
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    report = evals.render_report(results, prices)
+    (out / "report.md").write_text(report, encoding="utf-8")
+    (out / "results.json").write_text(evals.results_json(results), encoding="utf-8")
+    print()
+    print(report)
+    return EXIT_OK
+
+
 def _cmd_summarize(args: argparse.Namespace) -> int:
     print(render_summary(args.runs), end="")
     return EXIT_OK
@@ -169,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_summarize(args)
         if args.command == "investigate":
             return _cmd_investigate(args)
+        if args.command == "eval":
+            return _cmd_eval(args)
         return _cmd_run(args)
     except (ContractError, RuntimeError, ValueError, OSError) as exc:  # includes GitHubError
         print(f"error: {exc}", file=sys.stderr)
