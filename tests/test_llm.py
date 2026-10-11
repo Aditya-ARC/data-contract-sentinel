@@ -159,7 +159,7 @@ def test_empty_tool_arguments_mean_no_arguments():
 
 def test_chat_returns_text_and_usage():
     client, calls = stub_openai(SimpleNamespace(content="hello", tool_calls=None))
-    llm = OpenAIClient(model="m", client=client)
+    llm = OpenAIClient(model="m", client=client, api="chat")
 
     response = llm.chat([Message.user("hi")])
 
@@ -173,7 +173,7 @@ def test_chat_returns_text_and_usage():
 def test_chat_sends_tools_and_parses_tool_calls():
     message = SimpleNamespace(content=None, tool_calls=[raw_tool_call()])
     client, calls = stub_openai(message)
-    llm = OpenAIClient(model="m", client=client, max_output_tokens=500)
+    llm = OpenAIClient(model="m", client=client, max_output_tokens=500, api="chat")
 
     response = llm.chat([Message.user("go")], tools=[READ_TOOL])
 
@@ -215,3 +215,86 @@ def test_empty_base_url_env_is_ignored(clean_env):
     client = get_llm_client("openai")
     assert "OPENAI_BASE_URL" not in os.environ
     assert "api.openai.com" in str(client._client.base_url)
+
+
+# ---- Responses API --------------------------------------------------------------------
+
+
+def stub_responses(output, usage=(21, 9), model="stub-resp"):
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            output=output,
+            usage=SimpleNamespace(input_tokens=usage[0], output_tokens=usage[1]),
+            model=model,
+        )
+
+    return SimpleNamespace(responses=SimpleNamespace(create=create)), calls
+
+
+def test_api_defaults_to_responses_for_openai_and_chat_for_custom_urls(clean_env):
+    assert OpenAIClient(model="m", client=object()).api == "responses"
+    clean_env.setenv("OPENAI_BASE_URL", "http://localhost:11434/v1")
+    assert OpenAIClient(model="m", client=object()).api == "chat"
+    clean_env.setenv("OPENAI_API", "responses")
+    assert OpenAIClient(model="m", client=object()).api == "responses"
+
+
+def test_invalid_api_setting_is_a_config_error(clean_env):
+    clean_env.setenv("OPENAI_API", "soap")
+    with pytest.raises(LLMConfigError):
+        OpenAIClient(model="m", client=object())
+
+
+def test_responses_input_maps_every_message_kind():
+    from contractsentinel.llm.base import ToolCall
+    from contractsentinel.llm.openai_client import to_responses_input, to_responses_tools
+
+    call = ToolCall("c1", "read_file", {"path": "a"}, raw_arguments='{"path": "a"}')
+    items = to_responses_input(
+        [
+            Message.system("s"),
+            Message.user("u"),
+            Message.assistant("thinking", [call]),
+            Message.tool_result("c1", "file text"),
+            Message.assistant("done"),
+        ]
+    )
+    assert items == [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "u"},
+        {"role": "assistant", "content": "thinking"},
+        {"type": "function_call", "call_id": "c1", "name": "read_file", "arguments": '{"path": "a"}'},
+        {"type": "function_call_output", "call_id": "c1", "output": "file text"},
+        {"role": "assistant", "content": "done"},
+    ]
+    assert all("id" not in i for i in items)  # stored item ids would require reasoning items
+    tool = to_responses_tools([READ_TOOL])[0]
+    assert tool["name"] == "read_file" and tool["strict"] is False and "function" not in tool
+
+
+def test_responses_text_and_usage():
+    out = [SimpleNamespace(type="reasoning"), SimpleNamespace(
+        type="message", content=[SimpleNamespace(type="output_text", text="hel"), SimpleNamespace(type="output_text", text="lo")]
+    )]
+    client, calls = stub_responses(out)
+    response = OpenAIClient(model="m", client=client, api="responses").chat([Message.user("hi")])
+    assert response.content == "hello" and response.tool_calls == []
+    assert response.usage == Usage(21, 9) and response.model == "stub-resp"
+    assert calls[0]["store"] is False and "tools" not in calls[0]
+
+
+def test_responses_tool_calls_and_bad_arguments():
+    out = [
+        SimpleNamespace(type="function_call", call_id="c1", name="read_file", arguments='{"path": "a.py"}'),
+        SimpleNamespace(type="function_call", call_id="c2", name="read_file", arguments="{oops"),
+    ]
+    client, calls = stub_responses(out)
+    llm = OpenAIClient(model="m", client=client, api="responses", max_output_tokens=300)
+    response = llm.chat([Message.user("go")], tools=[READ_TOOL])
+    assert calls[0]["tools"][0]["name"] == "read_file" and calls[0]["max_output_tokens"] == 300
+    assert response.content is None
+    assert response.tool_calls[0].arguments == {"path": "a.py"}
+    assert response.tool_calls[1].parse_error
