@@ -28,6 +28,7 @@ _FIELD_KEYS = {
     "scale",
     "min",
     "max",
+    "sensitive",
     "description",
 }
 
@@ -48,6 +49,7 @@ class FieldSpec:
     scale: int = DEFAULT_DECIMAL_SCALE
     min: float | None = None
     max: float | None = None
+    sensitive: bool = False
     description: str = ""
 
 
@@ -169,6 +171,7 @@ def _parse_field(item: Any, index: int) -> FieldSpec:
         scale=scale,
         min=lo,
         max=hi,
+        sensitive=bool(item.get("sensitive", False)),
         description=str(item.get("description", "")),
     )
 

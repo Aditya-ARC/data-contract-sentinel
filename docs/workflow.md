@@ -1,6 +1,6 @@
 # Workflow and agent design
 
-This document is the design contract for the investigation agent. The pipeline half is built and tested. The agent half is planned and is marked as such.
+This document is the design contract for the investigation agent. Both the pipeline and the agent are built and tested.
 
 ## Principle
 
@@ -34,7 +34,7 @@ Vendor CSV lands (landing/ or manual dispatch)
        writes runs/<batch>/summary.json and violations.json
        uploads them as a workflow artifact and writes a job summary
   -> Exit 0: finished
-  -> Exit 1: `violations=true` output starts the agent job (planned)
+  -> Exit 1: `violations=true` output starts the agent job
        1. read violations, sample rows, transform code, recent git history
        2. classify the root cause
        3. write an incident report
@@ -43,7 +43,7 @@ Vendor CSV lands (landing/ or manual dispatch)
   -> A human reviews and merges
 ```
 
-## Root-cause classes (planned)
+## Root-cause classes
 
 | Class | Example | Agent output |
 |---|---|---|
@@ -52,12 +52,12 @@ Vendor CSV lands (landing/ or manual dispatch)
 | Contract out of date | The vendor legitimately added a new valid status | PR proposing the contract change, labeled for the contract owner to approve |
 | Schema drift | A column was renamed upstream | Issue with the report, plus a PR with a mapping fix if the rename is unambiguous |
 
-## Guardrails (planned)
+## Guardrails
 
 - The agent never merges. A human always reviews.
-- It cannot silently loosen the contract. Contract changes are separate, labeled PRs.
+- Contract edits are only accepted when the root cause is contract_out_of_date, and those PRs carry the `contract-change` label.
 - A PR opens only if the tests pass. Otherwise the output is an Issue.
-- Sample values are redacted before anything is sent to the LLM.
+- Values in columns marked `sensitive: true` are masked before anything is sent to the LLM or written to a report.
 - Every incident has a step limit and a token budget.
 - Least privilege: the agent job gets only the GitHub permissions it needs.
 - Audit trail per incident: run artifacts, quarantine rows, report, PR or Issue.

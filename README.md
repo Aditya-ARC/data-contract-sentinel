@@ -1,6 +1,6 @@
 # data-contract-sentinel
 
-A contract-first data pipeline guard. A written data contract defines what correct data looks like. Deterministic validation enforces it before anything reaches the warehouse. When a rule fails, bad rows are quarantined, run artifacts are written, and (in the next phase) an AI agent investigates, writes an incident report, and opens a GitHub pull request.
+A contract-first data pipeline guard. A written data contract defines what correct data looks like. Deterministic validation enforces it before anything reaches the warehouse. When a rule fails, bad rows are quarantined, run artifacts are written, and an AI agent investigates, writes an incident report, and opens a GitHub pull request.
 
 **The contract enforces. The agent investigates and proposes. A human decides.**
 
@@ -17,7 +17,7 @@ flowchart LR
     G -.->|exit code 1| H[AI agent: report + PR]
 ```
 
-Everything left of the dotted line is built and tested. The agent is the next phase.
+Both halves are built and tested. The agent has not yet been run live against a real model in this repo, so the OpenAI client is verified against a stub only.
 
 ## Quickstart
 
@@ -100,7 +100,7 @@ Adapters implement a small interface (`ensure_tables`, `replace_batch_clean`, `r
 
 ## LLM layer
 
-The agent will only talk to a provider-neutral interface in `contractsentinel/llm/`. OpenAI is the default provider:
+The agent only talks to a provider-neutral interface in `contractsentinel/llm/`. OpenAI is the default provider:
 
 ```bash
 export OPENAI_API_KEY=...
@@ -108,6 +108,22 @@ export OPENAI_MODEL=...      # pick a tool-calling model; defaults to gpt-5-mini
 ```
 
 `OPENAI_BASE_URL` points the same client at any OpenAI-compatible endpoint, such as a local Ollama server. Other providers can be added by implementing `LLMClient` and calling `register_provider`. `ScriptedLLMClient` replays canned responses so the agent loop can be tested without network access or spend.
+
+## Investigation agent
+
+When the pipeline exits with code 1, the `agent` job in `pipeline.yml` runs `contractsentinel investigate`. It reads the run artifacts, lets the model inspect the code and git history with read-only tools, and files the result:
+
+- **Pull request**, when the model proposes an exact fix, the fix passes validation, and the full test suite passes on a throwaway branch.
+- **Issue**, in every other case (source defects, no fix, failing tests, no LLM, LLM errors).
+
+Try it without GitHub or a model: `contractsentinel investigate --runs runs --dry-run --no-llm`.
+
+One-time repository setup for the workflow:
+
+1. Settings > Actions > General > Workflow permissions: enable **Allow GitHub Actions to create and approve pull requests** (without it the agent falls back to an Issue).
+2. Settings > Secrets and variables > Actions: add the secret `OPENAI_API_KEY`. Optional variables: `OPENAI_MODEL`, `OPENAI_BASE_URL`, `LLM_PROVIDER`. With no key the agent still files a deterministic report.
+
+PRs opened with the workflow token do not trigger CI automatically; push an empty commit or close and reopen the PR. See `docs/workflow.md` for the guardrails.
 
 ## Layout
 
@@ -125,8 +141,9 @@ src/contractsentinel/
   adapters/                    DuckDB and Snowflake
   llm/                         provider-neutral types, OpenAI client, factory, scripted client
   summary.py                   Markdown run summaries (used in Actions)
-  cli.py                       contractsentinel make-sample | run | summarize
-tests/                         125 tests
+  agent/                       tools, loop, schema, fixes, report, GitHub client, orchestration
+  cli.py                       contractsentinel make-sample | run | summarize | investigate
+tests/                         see `pytest`
 ```
 
 ## Status and roadmap
@@ -135,8 +152,8 @@ tests/                         125 tests
 - [x] DuckDB and Snowflake adapters
 - [x] LLM provider interface with OpenAI client
 - [x] GitHub Actions: CI and a pipeline workflow that exposes a `violations` output
-- [ ] Investigation agent: tools, loop, incident report (Issue when there is no code fix)
-- [ ] PR creation with guardrails (never merges, human review required)
+- [x] Investigation agent: read-only tools, bounded loop, incident report (Issue when there is no code fix)
+- [x] PR creation with guardrails (tests must pass, never merges, human review required)
 - [ ] Eval set of broken-batch scenarios to pick the cheapest model that passes
 - [ ] Demo: a "harmless" commit breaks date handling, a bad batch arrives, the agent finds the commit
 
