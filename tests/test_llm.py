@@ -204,3 +204,14 @@ def test_scripted_client_fails_loudly_when_exhausted():
 
 def test_response_type_is_importable():
     assert LLMResponse(content="x", tool_calls=[], usage=Usage(), model="m").content == "x"
+
+
+def test_empty_base_url_env_is_ignored(clean_env):
+    """CI passes unset variables as empty strings; the SDK must not see one as an address."""
+    import os
+
+    clean_env.setenv("OPENAI_BASE_URL", "")
+    clean_env.setenv("OPENAI_API_KEY", "sk-test")
+    client = get_llm_client("openai")
+    assert "OPENAI_BASE_URL" not in os.environ
+    assert "api.openai.com" in str(client._client.base_url)
