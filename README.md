@@ -125,6 +125,16 @@ One-time repository setup for the workflow:
 
 PRs opened with the workflow token do not trigger CI automatically; push an empty commit or close and reopen the PR. See `docs/workflow.md` for the guardrails.
 
+## Model evaluation
+
+`contractsentinel eval` runs the agent on four built-in scenarios with known answers (source defect, code regression, out-of-date contract, schema drift) and scores it with code, not with another model: right root cause, right suspect commit, and for fixes, whether the tests pass and the broken batch passes the contract afterwards. The `Model eval` workflow runs it with your repository secret and posts the results as an Issue.
+
+```bash
+contractsentinel eval --models gpt-6-luna,gpt-6.1-sol --trials 3
+```
+
+It calls the real model, so it costs money. Prices live in `src/contractsentinel/evals.py` and can be overridden with `--price MODEL=IN,OUT`.
+
 ## Layout
 
 ```
@@ -154,7 +164,7 @@ tests/                         see `pytest`
 - [x] GitHub Actions: CI and a pipeline workflow that exposes a `violations` output
 - [x] Investigation agent: read-only tools, bounded loop, incident report (Issue when there is no code fix)
 - [x] PR creation with guardrails (tests must pass, never merges, human review required)
-- [ ] Eval set of broken-batch scenarios to pick the cheapest model that passes
+- [x] Eval harness: broken-batch scenarios scored deterministically, per model
 - [ ] Demo: a "harmless" commit breaks date handling, a bad batch arrives, the agent finds the commit
 
 ## Known limits

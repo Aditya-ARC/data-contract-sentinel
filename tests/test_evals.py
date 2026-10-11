@@ -106,20 +106,22 @@ def test_fix_that_does_not_fix_the_batch_fails(scenarios, tmp_path):
     }
     s = scenarios["code_regression"]
     r = trial(s, report("code_regression", useless, s.suspect_commit[:7]), tmp_path)
-    assert r.checks["fix_valid"] and not r.checks["fix_works"] and not r.passed
+    assert r.checks["fix_valid"] and r.checks["fix_tests_pass"]
+    assert not r.checks["fix_fixes_batch"] and not r.passed
 
 
 def test_fix_that_breaks_the_tests_fails(scenarios, tmp_path):
     s = scenarios["code_regression"]
     r = trial(s, report("code_regression", slash_fix(), s.suspect_commit[:7]), tmp_path, gate=lambda repo: False)
-    assert not r.checks["fix_works"]
+    assert r.checks["fix_fixes_batch"] and not r.checks["fix_tests_pass"] and not r.passed
 
 
 def test_invalid_fix_is_flagged(scenarios, tmp_path):
     bad = {"summary": "x", "edits": [{"path": "README.md", "old": "a", "new": "b"}]}
     s = scenarios["code_regression"]
     r = trial(s, report("code_regression", bad, s.suspect_commit[:7]), tmp_path)
-    assert not r.checks["fix_valid"] and not r.checks["fix_works"]
+    assert not r.checks["fix_valid"] and not r.checks["fix_tests_pass"]
+    assert "allowed paths" in r.notes
 
 
 def test_source_defect_correct_answer_is_no_fix(scenarios, tmp_path):
@@ -147,7 +149,8 @@ def test_contract_only_fix_fails_when_a_test_pins_the_old_list(scenarios, tmp_pa
         tmp_path,
         gate=evals.default_gate,
     )
-    assert r.checks["fix_valid"] and not r.checks["fix_works"] and not r.passed
+    assert r.checks["fix_valid"] and r.checks["fix_fixes_batch"]
+    assert not r.checks["fix_tests_pass"] and not r.passed
 
 
 def test_out_of_date_contract_called_a_source_defect_fails(scenarios, tmp_path):
@@ -235,3 +238,10 @@ def test_cli_rejects_bad_arguments(capsys):
     assert main(["eval", "--models", " , "]) == EXIT_ERROR
     assert main(["eval", "--models", "m", "--trials", "0"]) == EXIT_ERROR
     assert main(["eval", "--models", "m", "--trials", "99"]) == EXIT_ERROR
+
+
+def test_failure_lines_say_why():
+    stopped = evals.TrialResult("m", "a", 1, False, {"diagnosed": False}, None, "max_steps", 12, 1, 1, 1.0)
+    noted = evals.TrialResult("m", "b", 1, False, {"fix_tests_pass": False}, "x", "submitted", 3, 1, 1, 1.0, notes="why")
+    text = evals.render_report([stopped, noted])
+    assert "stop reason: max_steps" in text and "(why)" in text

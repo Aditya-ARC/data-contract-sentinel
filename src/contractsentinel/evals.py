@@ -81,6 +81,7 @@ class TrialResult:
     output_tokens: int
     seconds: float
     error: str | None = None
+    notes: str = ""
 
 
 # ---- scenario construction --------------------------------------------------------------
@@ -347,6 +348,7 @@ def run_trial(
 
     analysis = outcome.analysis
     checks: dict[str, bool] = {"diagnosed": analysis is not None}
+    notes: list[str] = []
     if analysis is not None:
         checks["root_cause"] = analysis.root_cause == scenario.expected_root_cause
         if scenario.suspect_commit:
@@ -360,13 +362,17 @@ def run_trial(
         else:  # required
             checks["fix_proposed"] = fix is not None
             if fix is not None:
-                valid = not validate_fix(fix, analysis.root_cause, repo)
-                checks["fix_valid"] = valid
-                works = False
-                if valid:
+                problems = validate_fix(fix, analysis.root_cause, repo)
+                checks["fix_valid"] = not problems
+                tests_ok = fixes_batch = False
+                if not problems:
                     apply_fix(fix, repo)
-                    works = gate(repo) and batch_passes(repo, scenario.batch)
-                checks["fix_works"] = works
+                    tests_ok = gate(repo)
+                    fixes_batch = batch_passes(repo, scenario.batch)
+                checks["fix_tests_pass"] = tests_ok
+                checks["fix_fixes_batch"] = fixes_batch
+                if problems:
+                    notes.append("; ".join(problems)[:200])
     return TrialResult(
         model=llm.model,
         scenario=scenario.name,
@@ -380,6 +386,7 @@ def run_trial(
         output_tokens=outcome.usage.output_tokens,
         seconds=round(seconds, 1),
         error=outcome.error,
+        notes=" | ".join(notes),
     )
 
 
@@ -457,7 +464,10 @@ def render_report(results: list[TrialResult], prices=None) -> str:
         lines += ["", "## Failures", ""]
         for r in failures:
             failed = [k for k, v in r.checks.items() if not v] or [f"stopped: {r.stop_reason}"]
-            note = f" ({r.error[:120]})" if r.error else ""
+            detail = [x for x in (r.error and r.error[:120], r.notes) if x]
+            note = f" ({'; '.join(detail)})" if detail else ""
+            if "diagnosed" in failed:
+                note = f" (stop reason: {r.stop_reason}){note if r.error else ''}"
             lines.append(
                 f"- `{r.model}` {r.scenario} #{r.trial}: failed {', '.join(failed)}; "
                 f"root cause given: {r.root_cause}{note}"
