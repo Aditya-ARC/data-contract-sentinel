@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" font-family="Segoe UI, Inter, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="675" fill="#f8fafc"/>
+
+  <text x="40" y="52" font-size="30" font-weight="700" fill="#0f172a">How a bad vendor file becomes a reviewed fix</text>
+  <text x="40" y="82" font-size="19" fill="#475569">Rules are enforced by deterministic code. The AI agent only investigates and proposes.</text>
+
+  <!-- legend -->
+  <circle cx="780" cy="46" r="7" fill="#2563eb"/><text x="794" y="52" font-size="16" fill="#334155">Deterministic code</text>
+  <circle cx="960" cy="46" r="7" fill="#7c3aed"/><text x="974" y="52" font-size="16" fill="#334155">AI agent</text>
+  <circle cx="1070" cy="46" r="7" fill="#16a34a"/><text x="1084" y="52" font-size="16" fill="#334155">Human</text>
+
+  <!-- Row 1 -->
+  <rect x="40" y="125" width="250" height="140" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2.5"/>
+  <text x="58" y="160" font-size="22" font-weight="700" fill="#1e3a8a">1. Vendor file lands</text>
+  <text x="58" y="195" font-size="18" fill="#334155">A CSV batch arrives from</text>
+  <text x="58" y="220" font-size="18" fill="#334155">the vendor's feed</text>
+
+  <line x1="290" y1="195" x2="326" y2="195" stroke="#475569" stroke-width="2.5" marker-end="url(#arr)"/>
+
+  <rect x="330" y="125" width="330" height="140" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2.5"/>
+  <text x="348" y="160" font-size="22" font-weight="700" fill="#1e3a8a">2. Contract check</text>
+  <text x="348" y="192" font-size="18" fill="#334155">orders.yaml defines "correct":</text>
+  <text x="348" y="216" font-size="18" fill="#334155">types, nulls, patterns,</text>
+  <text x="348" y="240" font-size="18" fill="#334155">allowed values, uniqueness</text>
+
+  <!-- split arrows -->
+  <path d="M660,195 L690,195 L690,160 L716,160" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arr)"/>
+  <path d="M660,195 L690,195 L690,258 L716,258" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arr)"/>
+
+  <rect x="720" y="125" width="440" height="70" rx="14" fill="#eff6ff" stroke="#2563eb" stroke-width="2.5"/>
+  <text x="738" y="154" font-size="21" font-weight="700" fill="#1e3a8a">Pass: load to the warehouse</text>
+  <text x="738" y="180" font-size="18" fill="#334155">Clean batch, no AI call, no cost</text>
+
+  <rect x="720" y="212" width="440" height="106" rx="14" fill="#fffbeb" stroke="#d97706" stroke-width="2.5"/>
+  <text x="738" y="242" font-size="21" font-weight="700" fill="#78350f">Fail: protect the warehouse first</text>
+  <text x="738" y="271" font-size="18" fill="#334155">Quarantine the bad rows, or block the whole</text>
+  <text x="738" y="296" font-size="18" fill="#334155">batch if more than 20% of rows are invalid</text>
+
+  <!-- fail to agent connector -->
+  <path d="M940,318 L940,358 L205,358 L205,398" fill="none" stroke="#475569" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="560" y="350" font-size="17" font-style="italic" fill="#475569" text-anchor="middle">only when an error-level rule fails</text>
+
+  <!-- Row 2 -->
+  <rect x="40" y="402" width="350" height="146" rx="14" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2.5"/>
+  <text x="58" y="437" font-size="22" font-weight="700" fill="#4c1d95">3. AI agent investigates</text>
+  <text x="58" y="470" font-size="18" fill="#334155">Reads the violations, code and git</text>
+  <text x="58" y="494" font-size="18" fill="#334155">history with read-only tools, then</text>
+  <text x="58" y="518" font-size="18" fill="#334155">names the root cause and commit</text>
+
+  <line x1="390" y1="475" x2="436" y2="475" stroke="#475569" stroke-width="2.5" marker-end="url(#arr)"/>
+
+  <rect x="440" y="402" width="390" height="146" rx="14" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2.5"/>
+  <text x="458" y="437" font-size="22" font-weight="700" fill="#4c1d95">4. Opens a PR or an Issue</text>
+  <text x="458" y="470" font-size="18" fill="#334155">Code regression: a PR with a fix</text>
+  <text x="458" y="494" font-size="18" fill="#334155">that must pass the test suite</text>
+  <text x="458" y="518" font-size="18" fill="#334155">Source defect: an Issue, no code change</text>
+
+  <line x1="830" y1="475" x2="876" y2="475" stroke="#475569" stroke-width="2.5" marker-end="url(#arr)"/>
+
+  <rect x="880" y="402" width="280" height="146" rx="14" fill="#f0fdf4" stroke="#16a34a" stroke-width="2.5"/>
+  <text x="898" y="437" font-size="22" font-weight="700" fill="#14532d">5. A human decides</text>
+  <text x="898" y="470" font-size="18" fill="#334155">Review, run CI, merge.</text>
+  <text x="898" y="494" font-size="18" fill="#334155">The agent never merges.</text>
+
+  <!-- Guardrails -->
+  <rect x="40" y="574" width="1120" height="76" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="60" y="605" font-size="18" fill="#0f172a"><tspan font-weight="700">Guardrails: </tspan>read-only investigation tools, sensitive columns masked before the model sees them,</text>
+  <text x="60" y="632" font-size="18" fill="#0f172a">fixes limited to src/, tests/ and contracts/, tests must pass, and nothing is merged automatically.</text>
+</svg>

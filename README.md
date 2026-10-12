@@ -6,6 +6,10 @@ A contract-first data pipeline guard. A written data contract defines what corre
 
 ## How it works
 
+![From a bad vendor file to a reviewed fix: contract check, quarantine or block, AI agent, pull request, human decision](docs/flow.png)
+
+The pipeline itself, in more detail:
+
 ```mermaid
 flowchart LR
     A[Source CSV] --> B[normalize]
@@ -17,7 +21,7 @@ flowchart LR
     G -.->|exit code 1| H[AI agent: report + PR]
 ```
 
-Both halves are built and tested. The agent has not yet been run live against a real model in this repo, so the OpenAI client is verified against a stub only.
+Both halves are built and tested, and the agent has run live against a real model on this repo (see Results so far).
 
 ## Quickstart
 
@@ -176,12 +180,12 @@ tests/                         see `pytest`
 - [x] Investigation agent: read-only tools, bounded loop, incident report (Issue when there is no code fix)
 - [x] PR creation with guardrails (tests must pass, never merges, human review required)
 - [x] Eval harness: broken-batch scenarios scored deterministically, per model
-- [ ] Demo: a "harmless" commit breaks date handling, a bad batch arrives, the agent finds the commit
+- [x] Demo: a "harmless" commit breaks date handling, a bad batch arrives, the agent finds the commit and opens a tested fix PR
 
 ## Known limits
 
 - The Snowflake adapter is tested against a fake connection that checks the SQL and transactions. It has not been run against a live account.
-- The OpenAI client is tested against a stub of the SDK, not the live API.
+- The unit tests use a stub of the OpenAI SDK. The live API has been exercised through the demo runs and the model evaluation, not in CI.
 - Uniqueness is checked within a batch, not against rows already in the warehouse.
-- `violations.json` contains sample values from the source. Redact sensitive columns before any of it is sent to an LLM.
+- `violations.json` contains sample values from the source. Columns marked `sensitive` in the contract are masked before the agent sees them. Other columns are not, so mark every sensitive field.
 - Changing a field's type in the contract does not migrate an existing table.
